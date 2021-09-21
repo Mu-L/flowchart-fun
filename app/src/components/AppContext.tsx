@@ -11,10 +11,16 @@ import {
 import useLocalStorage from "react-use-localstorage";
 import { languages } from "../locales/i18n";
 import { colors, darkTheme } from "../slang/config";
+import { FlagsProvider } from "flagged";
 
-type Theme = typeof colors;
+export type Theme = typeof colors;
 
-export type Showing = "navigation" | "editor" | "settings" | "share";
+export type Showing =
+  | "navigation"
+  | "editor"
+  | "settings"
+  | "share"
+  | "feedback";
 
 // Stored in localStorage
 type UserSettings = {
@@ -36,6 +42,8 @@ type TAppContext = {
   language: string;
   showing: Showing;
   setShowing: Dispatch<SetStateAction<Showing>>;
+  hasError: boolean;
+  setHasError: Dispatch<SetStateAction<boolean>>;
 } & Partial<UserSettings>;
 
 export const AppContext = createContext({} as TAppContext);
@@ -53,14 +61,15 @@ const Provider = ({ children }: { children?: ReactNode }) => {
   }>(() => {
     try {
       const settings = JSON.parse(userSettingsString);
-      const theme =
-        settings.mode === "dark"
-          ? darkTheme
-          : typeof settings.mode === "undefined" &&
-            window.matchMedia &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? darkTheme
-          : colors;
+      if (typeof settings.mode === "undefined") {
+        settings.mode =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+      }
+      const theme = settings.mode === "dark" ? darkTheme : colors;
+
       return { settings, theme };
     } catch (e) {
       console.error(e);
@@ -75,10 +84,26 @@ const Provider = ({ children }: { children?: ReactNode }) => {
     [setUserSettings, settings]
   );
 
+  const [flags, setFeatures] = useState([]);
+
   useEffect(() => {
     // Remove chart that may have been stored, so
     // two indexes aren't shown on charts page
     window.localStorage.removeItem("flowcharts.fun:");
+  }, []);
+
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    (async function () {
+      const response = await fetch("/api/feature", {
+        mode: "cors",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+      });
+      const features = await response.json();
+      setFeatures(features);
+    })();
   }, []);
 
   return (
@@ -90,11 +115,13 @@ const Provider = ({ children }: { children?: ReactNode }) => {
         updateUserSettings,
         showing,
         setShowing,
+        hasError,
+        setHasError,
         ...settings,
         language: settings.language ?? defaultLanguage,
       }}
     >
-      {children}
+      <FlagsProvider features={flags}>{children}</FlagsProvider>
     </AppContext.Provider>
   );
 };

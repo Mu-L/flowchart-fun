@@ -27,8 +27,9 @@ module.exports = {
   },
   plugins: ["react", "jsx-a11y", "@typescript-eslint"],
   rules: {
-    "react-hooks/exhaustive-deps": "error",
+    "react-hooks/exhaustive-deps": "warn",
     "no-var": "error",
+    "no-debugger": "warn",
     "brace-style": "error",
     "prefer-template": "error",
     radix: "error",
@@ -39,6 +40,7 @@ module.exports = {
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/ban-ts-comment": "warn",
   },
+  ignorePatterns: ["api/**/*.js"],
   overrides: [
     {
       files: [

@@ -28,6 +28,7 @@ html {
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
+  overflow: hidden;
 }
 
 .node-hover {
@@ -44,7 +45,7 @@ body {
   width: 100%;
   content: " ";
   height: 1px;
-  background-color: var(--color-uiAccent);
+  background-color: var(--color-lineColor);
   display: block;
   position: absolute;
   top: calc(100% - 1px);

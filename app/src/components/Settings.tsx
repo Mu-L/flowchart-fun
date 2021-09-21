@@ -5,6 +5,7 @@ import { AppContext } from "./AppContext";
 import GraphOptions from "./GraphOptions";
 import { Trans } from "@lingui/macro";
 import { languages } from "../locales/i18n";
+import { useFeature } from "flagged";
 
 const noPaddingBottom = { tablet: { pb: 0 } };
 const lowerLinksAt: BoxProps["at"] = {
@@ -22,14 +23,19 @@ const lowerLinksAt: BoxProps["at"] = {
 const largeGap = 10;
 
 const Settings = memo(() => {
+  const isNext = useFeature("next");
   const { updateUserSettings, mode, language } = useContext(AppContext);
   const setLightMode = useCallback(() => {
+    document.body.classList.add("disableAnimation");
     updateUserSettings({ mode: "light" });
     window.plausible("Set Appearance", { props: { mode: "light" } });
+    setTimeout(() => document.body.classList.remove("disableAnimation"), 100);
   }, [updateUserSettings]);
   const setDarkMode = useCallback(() => {
+    document.body.classList.add("disableAnimation");
     updateUserSettings({ mode: "dark" });
     window.plausible("Set Appearance", { props: { mode: "dark" } });
+    setTimeout(() => document.body.classList.remove("disableAnimation"), 100);
   }, [updateUserSettings]);
   const changeLanguage = useCallback(
     (l: string) => {
@@ -49,7 +55,7 @@ const Settings = memo(() => {
       template="minmax(0, 1fr) auto / none"
     >
       <Box content="start stretch" gap={largeGap}>
-        <GraphOptions />
+        {!isNext && <GraphOptions />}
         <Box content="start" gap={4}>
           <Type weight="700">
             <Trans>User Preferences</Trans>
