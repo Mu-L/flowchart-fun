@@ -1,18 +1,27 @@
-import Editor, { EditorProps } from "@monaco-editor/react";
+import Editor, { EditorProps, DiffEditor, loader } from "@monaco-editor/react";
 import { highlight } from "graph-selector";
 import { editor } from "monaco-editor";
-import { useEffect, useRef } from "react";
+import { CSSProperties, useEffect, useRef } from "react";
 
-import { editorOptions } from "../lib/constants";
+import { editorOptions, editorStyleOptions } from "../lib/constants";
 import { useLightOrDarkMode } from "../lib/hooks";
 import { updateModelMarkers, useEditorStore } from "../lib/useEditorStore";
 import Loading from "./Loading";
 import { usePromptStore } from "../lib/usePromptStore";
 import classNames from "classnames";
+import { repairText } from "../lib/repairText";
+import { getDefaultText } from "../lib/getDefaultText";
+import { ConvertOnPasteOverlay } from "./ConvertOnPasteOverlay";
 
 type TextEditorProps = EditorProps & {
   extendOptions?: editor.IEditorOptions;
 };
+
+loader.config({
+  paths: {
+    vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs",
+  },
+});
 
 /** A Monaco editor which stays in sync with the current parser */
 export function TextEditor({ extendOptions = {}, ...props }: TextEditorProps) {
@@ -34,51 +43,93 @@ export function TextEditor({ extendOptions = {}, ...props }: TextEditorProps) {
   useEditorHover(hoverLineNumber);
 
   // Is converted flowchart text being written to the editor?
-  const convertIsRunning = usePromptStore((s) => s.convertIsRunning);
+  const convertIsRunning = usePromptStore((s) => s.isRunning);
+
+  const diff = usePromptStore((s) => s.diff);
+
+  if (diff) {
+    return (
+      <DiffEditor
+        original={props.value}
+        modified={diff}
+        options={{
+          ...editorOptions,
+          ...extendOptions,
+          renderSideBySide: false,
+        }}
+        loading={<Loading />}
+        wrapperProps={{
+          "data-testid": "Editor",
+          className: classNames("bg-white dark:bg-neutral-900", {
+            "overflow-hidden": isDragging,
+            "cursor-wait pointer-events-none opacity-50": convertIsRunning,
+          }),
+        }}
+      />
+    );
+  }
 
   return (
-    <Editor
-      {...props}
-      defaultLanguage={highlight.languageId}
-      options={{ ...editorOptions, ...extendOptions, theme }}
-      loading={<Loading />}
-      beforeMount={highlight.registerHighlighter}
-      onMount={(editor, monaco) => {
-        // Store the refs in client side zustand state
-        useEditorStore.setState({ editor, monaco });
+    <>
+      <div className="relative h-full w-full overflow-hidden">
+        <Editor
+          {...props}
+          defaultLanguage={highlight.languageId}
+          options={{ ...editorOptions, ...extendOptions, theme }}
+          loading={<Loading />}
+          beforeMount={highlight.registerHighlighter as any}
+          onMount={(editor, monaco) => {
+            // Store the refs in client side zustand state
+            useEditorStore.setState({ editor, monaco });
 
-        // Draw any current model markers
-        updateModelMarkers();
+            // Draw any current model markers
+            updateModelMarkers();
 
-        // double set the theme
-        monaco.editor.setTheme(theme);
+            // double set the theme
+            monaco.editor.setTheme(theme);
 
-        // Listen to when the selection changes
-        editor.onDidChangeCursorSelection(() => {
-          const selection = editor.getSelection();
-          if (selection) {
-            // get the text selected
-            const text = editor.getModel()?.getValueInRange(selection);
-            // store it in the editor
-            useEditorStore.setState({ selection: text });
-          } else {
-            useEditorStore.setState({ selection: "" });
-          }
-        });
+            // Listen to when the selection changes
+            editor.onDidChangeCursorSelection(() => {
+              const selection = editor.getSelection();
+              if (selection) {
+                // get the text selected
+                const text = editor.getModel()?.getValueInRange(selection);
+                // store it in the editor
+                useEditorStore.setState({ selection: text });
+              } else {
+                useEditorStore.setState({ selection: "" });
+              }
+            });
 
-        // Listen to when the user pastes into the document
-        editor.onDidPaste(() => {
-          useEditorStore.setState({ userPasted: true });
-        });
-      }}
-      wrapperProps={{
-        "data-testid": "Editor",
-        className: classNames("bg-white dark:bg-neutral-900", {
-          "overflow-hidden": isDragging,
-          "cursor-wait pointer-events-none opacity-50": convertIsRunning,
-        }),
-      }}
-    />
+            // Listen to when the user pastes into the document
+            editor.onDidPaste((e) => {
+              // get the text in the range
+              const text = editor.getModel()?.getValueInRange(e.range);
+
+              if (text) {
+                // store it in the editor
+                useEditorStore.setState({ userPasted: text });
+
+                // sanitize it if necessary
+                const sanitized = repairText(text);
+                if (sanitized) {
+                  replaceRange(editor, e.range, sanitized);
+                }
+              }
+            });
+          }}
+          wrapperProps={{
+            "data-testid": "Editor",
+            className: classNames("bg-white dark:bg-neutral-900", {
+              "overflow-hidden": isDragging,
+              "cursor-wait pointer-events-none opacity-50": convertIsRunning,
+            }),
+          }}
+        />
+        {props.value === "" && !convertIsRunning ? <Placeholder /> : null}
+      </div>
+      <ConvertOnPasteOverlay />
+    </>
   );
 }
 
@@ -112,4 +163,42 @@ function useEditorHover(hoverLineNumber?: number) {
       decorations.current = editor.deltaDecorations(decorations.current, []);
     };
   }, [hoverLineNumber]);
+}
+
+/**
+ * Given the instance of the editor, the range to replace, and the new text
+ * replace that range with the new text
+ */
+/**
+ * Given the instance of the editor, the range to replace, and the new text
+ * replace that range with the new text
+ */
+function replaceRange(
+  editor: editor.IStandaloneCodeEditor,
+  range: editor.ISingleEditOperation["range"],
+  text: string
+) {
+  editor.executeEdits("", [
+    {
+      range: range,
+      text: text,
+      forceMoveMarkers: true,
+    },
+  ]);
+}
+
+function Placeholder() {
+  return (
+    <div className="absolute top-[12px] left-[26px] w-full">
+      <pre
+        className="text-gray-400 dark:text-gray-500 leading-normal"
+        style={{
+          ...(editorStyleOptions as CSSProperties),
+          lineHeight: editorStyleOptions?.lineHeight + "px",
+        }}
+      >
+        {getDefaultText()}
+      </pre>
+    </div>
+  );
 }

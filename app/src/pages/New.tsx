@@ -4,7 +4,7 @@ import { templates } from "../lib/templates/templates";
 import { Trans, t } from "@lingui/macro";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import * as Tabs from "@radix-ui/react-tabs";
-import { useCallback, useContext, useState } from "react";
+import { Fragment, useCallback, useContext, useState } from "react";
 import { AppContext } from "../components/AppContextProvider";
 import { languages } from "../locales/i18n";
 import { getFunFlowchartName } from "../lib/getFunFlowchartName";
@@ -20,6 +20,8 @@ import {
 } from "../lib/paywallCopy";
 import { Warning } from "../components/Warning";
 import { FFTheme } from "../lib/FFTheme";
+import { RequestTemplate } from "../components/RequestTemplate";
+import { createExamples } from "./createExamples";
 
 type CreateChartOptions = {
   name: string;
@@ -143,6 +145,7 @@ export default function New2() {
   );
 
   const language = useContext(AppContext).language;
+  const [examples] = useState(createExamples());
 
   return (
     <form
@@ -163,7 +166,7 @@ export default function New2() {
           aria-label={t`Name Chart`}
         />
       </Section>
-      <Section title={t`Choose Template`}>
+      <Section title={t`Choose Template`} right={<RequestTemplate />}>
         <RadioGroup.Root asChild name="template" defaultValue="default">
           <div
             className="grid gap-x-2 gap-y-6 sm:grid-cols-2 md:grid-cols-3"
@@ -221,14 +224,42 @@ export default function New2() {
               </Trigger>
             </div>
           </Tabs.List>
-          <Tabs.Content value="ai" className="pt-4 grid gap-2">
-            <p className="text-neutral-700 leading-6 text-xs dark:text-neutral-300">
+          <Tabs.Content value="ai" className="pt-4 grid gap-1">
+            <p className="text-neutral-700 leading-6 text-sm dark:text-neutral-300">
               <Trans>
                 Enter a prompt or information you would like to create a chart
                 from.
               </Trans>
             </p>
+            <div className="text-neutral-700 text-xs dark:text-neutral-300 leading-6">
+              <span className="font-bold">
+                <Trans>Examples:</Trans>&nbsp;&nbsp;
+              </span>
+              {examples.map((example, index) => (
+                <Fragment key={example}>
+                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events */}
+                  <span
+                    className="italic opacity-80 hover:opacity-100 cursor-pointer hover:underline"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      // set example in textarea
+                      const textarea = document.querySelector(
+                        "#ai-prompt"
+                      ) as HTMLTextAreaElement;
+                      if (textarea) textarea.value = example;
+                    }}
+                  >
+                    {example}
+                  </span>
+                  {index < examples.length - 1 && (
+                    <span className="mx-2">|</span>
+                  )}
+                </Fragment>
+              ))}
+            </div>
             <Textarea
+              id="ai-prompt"
               className="h-[120px]"
               name="subject"
               disabled={createChartMutation.isLoading}
@@ -264,6 +295,7 @@ export default function New2() {
           leftIcon={<Plus size={16} />}
           type="submit"
           isLoading={createChartMutation.isLoading}
+          data-testid="Create Chart"
         >
           <Trans>Create</Trans>
         </Button2>
@@ -292,13 +324,18 @@ function Trigger(props: Parameters<typeof Tabs.Trigger>[0]) {
 function Section({
   children,
   title,
+  right,
 }: {
   children: React.ReactNode;
   title: string;
+  right?: React.ReactNode;
 }) {
   return (
     <section className="grid gap-4">
-      <h1 className="text-xl">{title}</h1>
+      <div className="grid gap-1 sm:flex justify-between items-end">
+        <h1 className="text-xl">{title}</h1>
+        {right}
+      </div>
       {children}
     </section>
   );
